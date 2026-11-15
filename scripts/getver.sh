@@ -30,6 +30,8 @@ try_git() {
 		BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 		ORIGIN="$(git rev-parse --verify --symbolic-full-name ${BRANCH}@{u} 2>/dev/null)"
 		[ -n "$ORIGIN" ] || ORIGIN="$(git rev-parse --verify --symbolic-full-name main@{u} 2>/dev/null)"
+		# Tag checkouts can have origin/main without a local tracking branch.
+		[ -n "$ORIGIN" ] || ORIGIN="$(git rev-parse --verify --symbolic-full-name refs/remotes/origin/main 2>/dev/null)"
 		REV="$(git rev-list ${REBOOT}..$GET_REV 2>/dev/null | wc -l | awk '{print $1}')"
 
 		if [ -n "$ORIGIN" ]; then
