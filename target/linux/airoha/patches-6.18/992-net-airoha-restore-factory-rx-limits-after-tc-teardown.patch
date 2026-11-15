@@ -1,0 +1,29 @@
+From: grislux55 <jebchou.hg@gmail.com>
+Subject: [PATCH] net: airoha: restore factory RX limits after tc teardown
+
+The AN7581 QDMA initialization now installs the factory RX ring limits,
+including the control-ring rates on rings 6, 7, 8 and 11. The tc matchall
+destroy path still programs rate zero for every allocated RX ring, which
+removes those defaults after a police filter is deleted.
+
+Restore the complete AN7581 factory table when the police filter is torn
+down. Preserve the existing disable behavior on other SoCs.
+
+Signed-off-by: grislux55 <jebchou.hg@gmail.com>
+---
+--- a/drivers/net/ethernet/airoha/airoha_eth.c
++++ b/drivers/net/ethernet/airoha/airoha_eth.c
+@@ -4119,9 +4119,12 @@ static int airoha_dev_tc_matchall(struct net_device *netdev,
+ 			rate = rate << 3; /* Kbps */
+ 			bucket_size = act->police.burst;
+ 		}
+-		fallthrough;
++		return airoha_qdma_set_rx_meter(dev, rate, bucket_size,
++						unit_type);
+ 	}
+ 	case TC_CLSMATCHALL_DESTROY:
++		if (airoha_is_7581(dev->eth))
++			return airoha_qdma_set_factory_rx_limits(airoha_qdma_deref(dev));
+ 		return airoha_qdma_set_rx_meter(dev, rate, bucket_size,
+ 						unit_type);
+ 	default:

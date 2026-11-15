@@ -71,6 +71,7 @@ grep -q '^CONFIG_VERSION_HOME_URL="https://github.com/grislux55/nnrrwrt"$' confi
 grep -q '^CONFIG_PACKAGE_drill=y$' configs/nnrrwrt-xg040g-md.config || fail "nnrrwrt-xg040g-md.config missing drill"
 grep -q '^CONFIG_PACKAGE_cpufreq=y$' configs/nnrrwrt-xg040g-md.config || fail "nnrrwrt-xg040g-md.config missing cpufreq"
 grep -q '^CONFIG_PACKAGE_luci-app-cpufreq=y$' configs/nnrrwrt-xg040g-md.config || fail "nnrrwrt-xg040g-md.config missing luci-app-cpufreq"
+grep -q '^CONFIG_PACKAGE_luci-app-firewall-ppe=y$' configs/nnrrwrt-xg040g-md.config || fail "nnrrwrt-xg040g-md.config missing luci-app-firewall-ppe"
 if grep -qE '^CONFIG_PACKAGE_(wpad|hostapd|wifi-scripts|wireless-regdb|iw|kmod-cfg80211|kmod-mac80211|kmod-mt76|kmod-mt79).*=[ym]$' configs/nnrrwrt-xg040g-md.config; then
 	fail "nnrrwrt-xg040g-md.config must not enable wireless stack or drivers"
 fi
@@ -119,6 +120,8 @@ if [ "$WITH_DEFCONFIG" -eq 1 ]; then
 	grep -q '^CONFIG_PACKAGE_airoha-pond=y$' .config || fail "nnrrwrt-xg040g-md defconfig missing airoha-pond"
 	grep -q '^CONFIG_PACKAGE_luci-app-pon=y$' .config || fail "nnrrwrt-xg040g-md defconfig missing luci-app-pon"
 	grep -q '^CONFIG_PACKAGE_luci-app-iptv=y$' .config || fail "nnrrwrt-xg040g-md defconfig missing luci-app-iptv"
+	grep -q '^CONFIG_PACKAGE_luci-app-firewall-ppe=y$' .config || fail "nnrrwrt-xg040g-md defconfig missing luci-app-firewall-ppe"
+	[ -f package/feeds/nnrrwrt_packages/luci-app-firewall-ppe/Makefile ] || fail "feed is missing luci-app-firewall-ppe"
 	grep -q '^CONFIG_PACKAGE_luci-app-ledtrig-usbport=y$' .config || fail "nnrrwrt-xg040g-md defconfig missing luci-app-ledtrig-usbport"
 	grep -q '^CONFIG_PACKAGE_luci-app-nnrrwrt-dashboard=y$' .config || fail "nnrrwrt-xg040g-md defconfig missing luci-app-nnrrwrt-dashboard"
 	grep -q '^CONFIG_PACKAGE_drill=y$' .config || fail "nnrrwrt-xg040g-md defconfig missing drill"
