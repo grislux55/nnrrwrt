@@ -22,10 +22,10 @@ Renew: ZiMing Mo <msylgj@immortalwrt.org>
 
 --- a/root/etc/config/firewall
 +++ b/root/etc/config/firewall
-@@ -5,6 +5,10 @@ config defaults
+@@ -3,6 +3,10 @@ config defaults
+ 	option input		REJECT
+ 	option output		ACCEPT
  	option forward		REJECT
- # Uncomment this line to disable ipv6 rules
- #	option disable_ipv6	1
 +	option flow_offloading	1
 +	option flow_offloading_hw	1
 +	option fullcone		1
@@ -92,7 +92,7 @@ Renew: ZiMing Mo <msylgj@immortalwrt.org>
  const fs = require("fs");
  const uci = require("uci");
  const ubus = require("ubus");
-@@ -503,6 +505,25 @@ function nft_try_hw_offload(devices) {
+@@ -542,6 +544,25 @@ function nft_try_hw_offload(devices) {
  	return (rc == 0);
  }
  
@@ -118,7 +118,7 @@ Renew: ZiMing Mo <msylgj@immortalwrt.org>
  
  return {
  	read_kernel_version: function() {
-@@ -911,6 +932,18 @@ return {
+@@ -944,6 +965,18 @@ return {
  			warn(`[!] ${msg}\n`);
  	},
  
@@ -137,7 +137,7 @@ Renew: ZiMing Mo <msylgj@immortalwrt.org>
  	get: function(sid, opt) {
  		return this.cursor.get("firewall", sid, opt);
  	},
-@@ -1094,6 +1127,21 @@ return {
+@@ -1127,6 +1160,21 @@ return {
  		}
  	},
  
@@ -159,7 +159,7 @@ Renew: ZiMing Mo <msylgj@immortalwrt.org>
  	parse_policy: function(val) {
  		return this.parse_enum(val, [
  			"accept",
-@@ -1533,6 +1581,7 @@ return {
+@@ -1632,6 +1680,7 @@ return {
  			"dnat",
  			"snat",
  			"masquerade",
@@ -167,7 +167,7 @@ Renew: ZiMing Mo <msylgj@immortalwrt.org>
  			"npt",
  			"accept",
  			"reject",
-@@ -2020,6 +2069,8 @@ return {
+@@ -2122,6 +2171,8 @@ return {
  		}
  
  		let defs = this.parse_options(data, {
@@ -176,7 +176,7 @@ Renew: ZiMing Mo <msylgj@immortalwrt.org>
  			input: [ "policy", "drop" ],
  			output: [ "policy", "drop" ],
  			forward: [ "policy", "drop" ],
-@@ -2054,6 +2105,11 @@ return {
+@@ -2156,6 +2207,11 @@ return {
  
  		delete defs.syn_flood;
  
@@ -188,9 +188,9 @@ Renew: ZiMing Mo <msylgj@immortalwrt.org>
  		this.state.defaults = defs;
  	},
  
-@@ -2299,10 +2355,23 @@ return {
- 		zone.related_subnets = related_subnets;
+@@ -2406,10 +2462,23 @@ return {
  		zone.related_physdevs = related_physdevs;
+ 		zone.related_l3devs = related_l3devs;
  
 -		if (zone.masq || zone.masq6)
 +		if (zone.masq) {
