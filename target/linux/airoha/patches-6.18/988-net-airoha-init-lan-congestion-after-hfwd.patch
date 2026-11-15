@@ -1,0 +1,133 @@
+From: grislux55 <jebchou.hg@gmail.com>
+Subject: [PATCH] net: airoha: initialize LAN congestion after the HFWD pool
+
+AN7581 programs a 16K SRAM hardware forwarding descriptor pool but leaves
+the dynamic congestion bounds inherited from reset or the bootloader.
+On XG-040G-MD these are 0xffff/0x02c0 for total usage, 0xffff/0x0016
+per channel and 0xffff/0x0002 per queue. Hardware forwarding therefore
+uses bounds unrelated to the allocated pool.
+
+Initialize the XG-040G-MD factory LAN SRAM bounds after LMGR succeeds,
+using the completed poll value to select AN7581 QDMA0 with 16K SRAM
+descriptors. This keeps allocation and timeout failures ahead of the new
+writes, and avoids an extra LMGR read or persistent configuration state.
+Program all normal and half-sized DEI bounds before enabling dynamic
+recalculation. Preserve unrelated control bits and the existing drop
+protection setup in airoha_qdma_hw_init().
+
+The register layout is shared by the total, channel and queue limits,
+so describe each bound once and use indexed normal/DEI registers.
+
+The factory qdma_lan.ko SRAM branch uses total max/min 0x3999/0x3000,
+channel 0x3999/0x0400 and queue 0x2000/0x0020. These differ from the
+public SDK LAN constants. Its auto-config function writes each DEI bound
+at half the normal value; qdma_dev_init selects dynamic normal mode,
+enables all three recalculation triggers and programs a 250us tick.
+These values and writes were checked by disassembly and ARM64 emulation
+of the factory functions with in-memory MMIO.
+
+Factory module: XG-040G-MD 7.3.160.1_v002, qdma_lan.ko, SHA256
+337d66fca6bef01d7e83f1d441e10585825816d61b15614efbde09cdd0a6d9c8.
+SDK register/API reference: lotusmomo/airoha_sdk at
+32b5aa356c2406edef8806aaf75451ff0a5286f2,
+private/qdma/qdma_lan/{qdma_dev_7581.h,qdma_dev.c,qdma_api.c}.
+Related investigation: https://github.com/pbs05/ponwrt/issues/63
+LAN profile proposal: https://github.com/pbs05/ponwrt/pull/64
+
+Signed-off-by: grislux55 <jebchou.hg@gmail.com>
+---
+--- a/drivers/net/ethernet/airoha/airoha_eth.c
++++ b/drivers/net/ethernet/airoha/airoha_eth.c
+@@ -1780,9 +1780,50 @@
+ 	}
+ }
+ 
++static void airoha_qdma_init_lan_congestion(struct airoha_qdma *qdma,
++					    u32 lmgr_cfg)
++{
++	/* XG-040G-MD factory bounds for the AN7581 16K LAN SRAM pool. */
++	static const struct {
++		u16 max;
++		u16 min;
++	} thresholds[] = {
++		{ 0x3999, 0x3000 }, /* total */
++		{ 0x3999, 0x0400 }, /* channel */
++		{ 0x2000, 0x0020 }, /* queue */
++	};
++	u32 mask;
++	int i;
++
++	if (!airoha_is_7581(qdma->eth) || qdma != &qdma->eth->qdma[0])
++		return;
++
++	/* Use the completed LMGR configuration from HFWD initialization. */
++	mask = LMGR_INIT_START | LMGR_SRAM_MODE_MASK | HW_FWD_DESC_NUM_MASK;
++	if ((lmgr_cfg & mask) != (LMGR_SRAM_MODE_MASK |
++				  FIELD_PREP(HW_FWD_DESC_NUM_MASK, 0x4000)))
++		return;
++
++	for (i = 0; i < ARRAY_SIZE(thresholds); i++) {
++		airoha_qdma_wr(qdma, REG_TXQ_DYN_THR(i),
++			       FIELD_PREP(TXQ_CNGST_MAX_THR_MASK, thresholds[i].max) |
++			       FIELD_PREP(TXQ_CNGST_MIN_THR_MASK, thresholds[i].min));
++		/* DEI traffic uses half of each normal bound. */
++		airoha_qdma_wr(qdma, REG_TXQ_DEI_THR(i),
++			       FIELD_PREP(TXQ_CNGST_MAX_THR_MASK, thresholds[i].max >> 1) |
++			       FIELD_PREP(TXQ_CNGST_MIN_THR_MASK, thresholds[i].min >> 1));
++	}
++
++	/* Recalculate after configuration changes, on packets and every 250us. */
++	mask = TXQ_CNGST_DYN_EN | TXQ_CNGST_CFG_TRIGGER |
++	       TXQ_CNGST_PACKET_TRIGGER | TXQ_CNGST_TIME_TRIGGER;
++	airoha_qdma_rmw(qdma, REG_TXQ_CNGST_CFG, mask | TXQ_CNGST_TICKSEL_MASK,
++			mask | FIELD_PREP(TXQ_CNGST_TICKSEL_MASK, 250));
++}
++
+ static int airoha_qdma_init_hfwd_queues(struct airoha_qdma *qdma)
+ {
+-	int size, index, num_desc = HW_DSCP_NUM;
++	int size, index, err, num_desc = HW_DSCP_NUM;
+ 	struct airoha_eth *eth = qdma->eth;
+ 	int id = qdma - &eth->qdma[0];
+ 	u32 status, buf_size;
+@@ -1844,10 +1885,16 @@
+ 			FIELD_PREP(HW_FWD_DESC_NUM_MASK, num_desc) |
+ 			LMGR_INIT_START | LMGR_SRAM_MODE_MASK);
+ 
+-	return read_poll_timeout(airoha_qdma_rr, status,
+-				 !(status & LMGR_INIT_START), USEC_PER_MSEC,
+-				 30 * USEC_PER_MSEC, true, qdma,
+-				 REG_LMGR_INIT_CFG);
++	err = read_poll_timeout(airoha_qdma_rr, status,
++				!(status & LMGR_INIT_START), USEC_PER_MSEC,
++				30 * USEC_PER_MSEC, true, qdma,
++				REG_LMGR_INIT_CFG);
++	if (err)
++		return err;
++
++	airoha_qdma_init_lan_congestion(qdma, status);
++
++	return 0;
+ }
+ 
+ static void airoha_qdma_init_qos(struct airoha_qdma *qdma)
+--- a/drivers/net/ethernet/airoha/airoha_regs.h
++++ b/drivers/net/ethernet/airoha/airoha_regs.h
+@@ -863,6 +863,17 @@
+ #define REG_TXQ_CNGST_CFG		0x10a0
+ #define TXQ_CNGST_DROP_EN		BIT(31)
+ #define TXQ_CNGST_DEI_DROP_EN		BIT(30)
++#define TXQ_CNGST_DYN_EN		BIT(29)
++#define TXQ_CNGST_CFG_TRIGGER		BIT(18)
++#define TXQ_CNGST_PACKET_TRIGGER	BIT(17)
++#define TXQ_CNGST_TIME_TRIGGER		BIT(16)
++#define TXQ_CNGST_TICKSEL_MASK		GENMASK(15, 0)
++
++/* Dynamic bounds: total, channel and queue. */
++#define REG_TXQ_DYN_THR(_n)		(0x10a4 + ((_n) << 2))
++#define REG_TXQ_DEI_THR(_n)		(0x10d4 + ((_n) << 2))
++#define TXQ_CNGST_MAX_THR_MASK		GENMASK(31, 16)
++#define TXQ_CNGST_MIN_THR_MASK		GENMASK(15, 0)
+ 
+ #define REG_SLA_TRTCM_CFG		0x1150
+ #define SLA_TRTCM_EN_MASK		BIT(31)
