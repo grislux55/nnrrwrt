@@ -1,0 +1,97 @@
+From: grislux55 <jebchou.hg@gmail.com>
+Subject: [PATCH] net: airoha: initialize factory multicast forwarding
+
+The AN7581 factory qdma_lan.ko and qdma_wan.ko initialize all 16
+multicast force-port entries with a controller specific PSE port,
+queue, special tag, and high-field preservation policy. The switch
+drops multicast traffic when the force-port and special-tag values do
+not match the SoC topology.
+
+Program the factory LAN and WAN tables during QDMA initialization. The
+values combine the high-field preservation, force-port and special-tag
+fields; the read-modify-write also preserves bits 30:25. Restrict the
+tables to AN7581 because they describe its PSE and QDMA topology.
+
+The table values were read from the factory modules' .data sections.
+Their setup loop and masks were checked against the public SDK functions
+qdmaSetMulticastFport(), qdmaSetMulticastSptag() and
+qdmaEnableMulticastSptagKeepHi().
+
+Factory modules: XG-040G-MD 7.3.160.1_v002, qdma_lan.ko SHA256
+337d66fca6bef01d7e83f1d441e10585825816d61b15614efbde09cdd0a6d9c8 and
+qdma_wan.ko SHA256
+29713c102f67e71681b850e0aac387aacbaa734a7bc1058447d682f5a9eb23c8.
+SDK register/API reference: lotusmomo/airoha_sdk at
+32b5aa356c2406edef8806aaf75451ff0a5286f2,
+private/qdma/qdma_lan/{qdma_dev_7581.h,qdma_dev.c,qdma_reg_7580.h}.
+
+Signed-off-by: grislux55 <jebchou.hg@gmail.com>
+---
+--- a/drivers/net/ethernet/airoha/airoha_eth.c
++++ b/drivers/net/ethernet/airoha/airoha_eth.c
+@@ -1974,6 +1974,42 @@
+ 	}
+ }
+ 
++static void airoha_qdma_init_multicast(struct airoha_qdma *qdma)
++{
++	/* Factory force-port and special-tag values for AN7581. */
++	static const u32 lan_forwarding[] = {
++		0x80200001, 0x80210002, 0x80220004, 0x80230008,
++		0x80240010, 0x80250020, 0x00000000, 0x00800000,
++		0x00600000, 0x00610000, 0x00620000, 0x00630000,
++		0x00640000, 0x00650000, 0x00660000, 0x00c00000,
++	};
++	static const u32 wan_forwarding[] = {
++		0x80400001, 0x80410002, 0x80420004, 0x80430008,
++		0x80440010, 0x80450020, 0x00460000, 0x00470000,
++		0x00480000, 0x00490000, 0x004a0000, 0x004b0000,
++		0x004c0000, 0x004d0000, 0x004e0000, 0x004f0000,
++	};
++	const u32 *forwarding;
++	u32 mask;
++	int i;
++
++	if (!airoha_is_7581(qdma->eth))
++		return;
++
++	if (qdma == &qdma->eth->qdma[0])
++		forwarding = lan_forwarding;
++	else if (qdma == &qdma->eth->qdma[1])
++		forwarding = wan_forwarding;
++	else
++		return;
++
++	mask = MULTICAST_SPTAG_KEEP_HI_MASK | MULTICAST_FPORT_MASK |
++	       MULTICAST_SPTAG_MASK;
++	for (i = 0; i < ARRAY_SIZE(lan_forwarding); i++)
++		airoha_qdma_rmw(qdma, REG_MULTICAST_MODIFY_FPORT(i), mask,
++				forwarding[i]);
++}
++
+ static int airoha_qdma_hw_init(struct airoha_qdma *qdma)
+ {
+ 	int i;
+@@ -2020,6 +2056,8 @@ static int airoha_qdma_hw_init(struct airoha_qdma *qdma)
+ 		       GLOBAL_CFG_TX_WB_DONE_MASK |
+ 		       FIELD_PREP(GLOBAL_CFG_MAX_ISSUE_NUM_MASK, 2));
+ 
++	airoha_qdma_init_multicast(qdma);
++
+ 	airoha_qdma_init_qos(qdma);
+ 
+ 	/* disable qdma rx delay interrupt */
+--- a/drivers/net/ethernet/airoha/airoha_regs.h
++++ b/drivers/net/ethernet/airoha/airoha_regs.h
+@@ -874,6 +874,11 @@
+ #define QOS_AGING_METHOD_MASK		BIT(30)
+ #define QOS_AGING_FAST_REPLACE_MASK	BIT(29)
+ 
++#define REG_MULTICAST_MODIFY_FPORT(_n)	(0x0880 + ((_n) << 2))
++#define MULTICAST_SPTAG_KEEP_HI_MASK	BIT(31)
++#define MULTICAST_FPORT_MASK		GENMASK(24, 16)
++#define MULTICAST_SPTAG_MASK		GENMASK(15, 0)
++
+ /* Dynamic bounds: total, channel and queue. */
+ #define REG_TXQ_DYN_THR(_n)		(0x10a4 + ((_n) << 2))
+ #define REG_TXQ_DEI_THR(_n)		(0x10d4 + ((_n) << 2))
