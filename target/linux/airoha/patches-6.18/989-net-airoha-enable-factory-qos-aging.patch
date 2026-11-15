@@ -1,0 +1,56 @@
+From: grislux55 <jebchou.hg@gmail.com>
+Subject: [PATCH] net: airoha: enable the factory QDMA QoS aging policy
+
+The AN7581 factory qdma_lan.ko and qdma_wan.ko both call
+qdma_dev_aging_init() during QDMA setup. The function sets the QoS aging
+enable and fast-replacement bits, clears the aging-method bit for threshold
+mode, and preserves the aging time and unrelated fields.
+
+Program the same fields after the existing QDMA QoS initialization on each
+controller. A read-modify-write preserves the time setting and the other
+QDMA state initialized by the driver.
+
+The bit layout was checked against the independent public SDK functions
+qdmaEnableQosAgingEn(), qdmaSetQosAgingMethod() and
+qdmaEnableQosAgingFastReplaceEn(). The factory machine code performs the
+same three updates at QDMA_CSR_QOS_AGING_CFG (0x10bc).
+
+Factory modules: XG-040G-MD 7.3.160.1_v002, qdma_lan.ko SHA256
+337d66fca6bef01d7e83f1d441e10585825816d61b15614efbde09cdd0a6d9c8 and
+qdma_wan.ko SHA256
+29713c102f67e71681b850e0aac387aacbaa734a7bc1058447d682f5a9eb23c8.
+SDK register/API reference: lotusmomo/airoha_sdk at
+32b5aa356c2406edef8806aaf75451ff0a5286f2,
+private/qdma/qdma_lan/{qdma_dev_7581.h,qdma_dev.c}.
+
+Signed-off-by: grislux55 <jebchou.hg@gmail.com>
+---
+--- a/drivers/net/ethernet/airoha/airoha_eth.c
++++ b/drivers/net/ethernet/airoha/airoha_eth.c
+@@ -1905,6 +1905,12 @@ static void airoha_qdma_init_qos(struct a
+ 	airoha_qdma_clear(qdma, REG_PSE_BUF_USAGE_CFG,
+ 			  PSE_BUF_ESTIMATE_EN_MASK);
+ 
++	/* Use the factory aging policy: threshold, fast replacement, enabled. */
++	airoha_qdma_rmw(qdma, REG_QOS_AGING_CFG,
++			QOS_AGING_EN_MASK | QOS_AGING_METHOD_MASK |
++			QOS_AGING_FAST_REPLACE_MASK,
++			QOS_AGING_EN_MASK | QOS_AGING_FAST_REPLACE_MASK);
++
+ 	airoha_qdma_set(qdma, REG_EGRESS_RATE_METER_CFG,
+ 			EGRESS_RATE_METER_EN_MASK |
+ 			EGRESS_RATE_METER_EQ_RATE_EN_MASK);
+--- a/drivers/net/ethernet/airoha/airoha_regs.h
++++ b/drivers/net/ethernet/airoha/airoha_regs.h
+@@ -869,6 +869,11 @@
+ #define TXQ_CNGST_TIME_TRIGGER		BIT(16)
+ #define TXQ_CNGST_TICKSEL_MASK		GENMASK(15, 0)
+ 
++#define REG_QOS_AGING_CFG		0x10bc
++#define QOS_AGING_EN_MASK		BIT(31)
++#define QOS_AGING_METHOD_MASK		BIT(30)
++#define QOS_AGING_FAST_REPLACE_MASK	BIT(29)
++
+ /* Dynamic bounds: total, channel and queue. */
+ #define REG_TXQ_DYN_THR(_n)		(0x10a4 + ((_n) << 2))
+ #define REG_TXQ_DEI_THR(_n)		(0x10d4 + ((_n) << 2))
