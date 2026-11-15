@@ -1,10 +1,11 @@
 From: grislux55 <jebchou.hg@gmail.com>
-Subject: [PATCH] net: airoha: tune QDMA ring depths, NAPI budgets, and PPE aging
+Subject: [PATCH] net: airoha: tune QDMA rings, NAPI budgets, and PPE aging
 
 Tune default QDMA descriptor ring depths for 512 MB AN7581 targets
 (rx_ring_size=2048, lro_rx_ring_size=64, tx_ring_size=2048), increase
 RX/TX NAPI poll weights to 128 without triggering netif_napi_add_weight
-warnings, and align default PPE UDP aging with NF_FLOW_TIMEOUT (30s).
+warnings. Default the PPE bind aging timers to the factory initialization
+`hw_nat -U 60 60 5 15`: TCP 60s, UDP 60s, TCP FIN 5s, and non-TCP/UDP 15s.
 
 Expose module parameters and runtime /sys/kernel/debug/ppe/{aging,napi_budget}
 controls.
@@ -171,12 +172,12 @@ Signed-off-by: grislux55 <jebchou.hg@gmail.com>
  MODULE_PARM_DESC(pon_pbit_ib2_pcp,
  		 "Set IB2_PCP bit in PPE FOE entries when VLAN PCP is non-zero");
  
-+static unsigned int ppe_age_non_l4 = 60;
++static unsigned int ppe_age_non_l4 = 15;
 +module_param(ppe_age_non_l4, uint, 0644);
 +MODULE_PARM_DESC(ppe_age_non_l4,
 +		 "PPE non-L4 entry aging delta in seconds");
 +
-+static unsigned int ppe_age_udp = 30;
++static unsigned int ppe_age_udp = 60;
 +module_param(ppe_age_udp, uint, 0644);
 +MODULE_PARM_DESC(ppe_age_udp, "PPE UDP entry aging delta in seconds");
 +
@@ -184,7 +185,7 @@ Signed-off-by: grislux55 <jebchou.hg@gmail.com>
 +module_param(ppe_age_tcp, uint, 0644);
 +MODULE_PARM_DESC(ppe_age_tcp, "PPE TCP entry aging delta in seconds");
 +
-+static unsigned int ppe_age_tcp_fin = 1;
++static unsigned int ppe_age_tcp_fin = 5;
 +module_param(ppe_age_tcp_fin, uint, 0644);
 +MODULE_PARM_DESC(ppe_age_tcp_fin,
 +		 "PPE TCP FIN entry aging delta in seconds");
