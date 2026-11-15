@@ -4,15 +4,11 @@ English | [简体中文](README_zh.md)
 
 **NNRRWrt** is a Linux 6.18 optical gateway, main-router, and relay firmware targeting **Nokia XG-040G-MD** (Airoha AN7581, UBI & USB-SFP variants) and compatible Airoha AN7581 / AN7583 PON devices, built on [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) and [PonWrt](https://github.com/pbs05/ponwrt).
 
-## ⚠️ Disclaimer
+## ⚠️ Flashing risks
 
-NNRRWrt is an open-source firmware project intended for research, learning, and home network engineering.
+Back up the original firmware and device data before flashing. Flashing firmware or changing PON settings can prevent the device from booting, erase configuration or device-specific data, or prevent PON registration.
 
-Flashing firmware or modifying PON-related settings involves risks and may result in boot failure, loss of configuration or device-specific data, or failure to register with the PON network. Please back up the original firmware and device data before making any changes.
-
-Users are responsible for ensuring that their use complies with applicable laws, regulations, and network operator requirements. Do not use this project for unauthorized network access, impersonating or cloning another device's identity, or interfering with operator networks.
-
-The authors and contributors are not responsible for device damage, network service disruption, or other consequences resulting from flashing, configuring, or using this project.
+Use authorized network access and device identities. Follow local laws, regulations, and operator requirements. Do not clone another device's identity or interfere with an operator network.
 
 ## Repositories
 
