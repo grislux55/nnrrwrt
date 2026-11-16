@@ -78,8 +78,18 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
+			/* Record head AA 55. */
+			pon_calibration_magic: calibration-magic@0 {
+				reg = <0x0 0x2>;
+			};
+
 			pon_calibration: calibration@2 {
 				reg = <0x2 0x200>;
+			};
+
+			/* Little-endian CRC-16/MODBUS of the 512 BOB bytes. */
+			pon_calibration_crc: calibration-crc@3fe {
+				reg = <0x3fe 0x2>;
 			};
 		};
 	};

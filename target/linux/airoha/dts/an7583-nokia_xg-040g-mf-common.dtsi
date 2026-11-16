@@ -206,9 +206,14 @@
 		/* Logical high keeps optical transmission disabled during probe. */
 		tx-disable-gpios = <&an7583_pinctrl 15 GPIO_ACTIVE_HIGH>;
 
-		/* The 512 bytes after the bosa header contain per-device optical data. */
-		nvmem-cells = <&pon_calibration>;
-		nvmem-cell-names = "calibration";
+		/*
+		 * The 512 bytes after the bosa header contain per-device optical data.
+		 * The driver checks them against the record head and CRC.
+		 */
+		nvmem-cells = <&pon_calibration>, <&pon_calibration_magic>,
+			      <&pon_calibration_crc>;
+		nvmem-cell-names = "calibration", "calibration-magic",
+				   "calibration-crc";
 	};
 };
 
